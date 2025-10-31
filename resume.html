@@ -1,10 +1,107 @@
 <!doctype html>
-<html lang="uk"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Резюме (PDF)</title><link rel="stylesheet" href="style.css"/></head>
-<body><nav><div class="inner"><a class="" href="index.html">Про мене</a><a class="active" href="resume.html">Резюме (PDF)</a><a class="" href="report.html">Аналітичний звіт</a></div></nav><main class="container">
-<h1>Резюме</h1><p class="meta">Сторінка 2 із 3 — вбудований PDF</p>
-<section class="card"><p><strong>Файл:</strong> <code>assets/ШОСТАК_резюме.pdf</code></p>
-<embed class="embed" src="assets/ШОСТАК_резюме.pdf#view=FitH" type="application/pdf"/>
-<p><a class="button" target="_blank" rel="noopener" href="assets/ШОСТАК_резюме.pdf">Відкрити у новій вкладці</a></p>
-<small>Якщо PDF не відкривається в браузері — використайте посилання вище.</small></section>
-</main></body></html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Резюме (PDF)</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .embed{width:100%;height:84vh;border:1px solid #24304e;border-radius:12px;background:#000}
+    .card{background:#111831;border:1px solid #24304e;border-radius:14px;padding:18px;margin:18px 0;color:#e6edf7}
+    .container{max-width:980px;margin:auto;padding:28px 20px}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+    .button{display:inline-block;background:#1f2a44;border:1px solid #24304e;color:#e6edf7;padding:10px 14px;border-radius:10px;text-decoration:none}
+    .meta{color:#9fb0c9}
+    .canvas-wrap{display:grid;gap:12px}
+    .canvas-wrap canvas{width:100%;height:auto;border:1px solid #24304e;border-radius:10px;background:#000}
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Резюме</h1>
+    <p class="meta">Сторінка 2 із 3 — вбудований PDF + резервний рендер через PDF.js</p>
+
+    <!-- 1) Просте вбудування: працює у більшості десктопних браузерів -->
+    <section class="card">
+      <p><strong>Вбудований режим:</strong> якщо нижче чорне поле або «не підтримується», використай режим PDF.js трохи нижче.</p>
+      <embed class="embed" src="assets/resume.pdf#view=FitH" type="application/pdf" />
+      <p><a class="button" href="assets/resume.pdf" target="_blank" rel="noopener">Відкрити у новій вкладці</a></p>
+    </section>
+
+    <!-- 2) PDF.js fallback: працює і на мобільних -->
+    <section class="card">
+      <h2>Режим PDF.js (сумісність із мобільними)</h2>
+      <div class="controls">
+        <button id="prev" class="button">◀ Попередня</button>
+        <button id="next" class="button">Наступна ▶</button>
+        <span class="meta">Сторінка: <span id="page_num">1</span>/<span id="page_count">?</span></span>
+        <label class="meta">Масштаб: <input id="scale" type="range" min="0.8" max="2.0" step="0.1" value="1.2"/></label>
+        <a class="button" href="assets/resume.pdf" target="_blank" rel="noopener">Завантажити PDF</a>
+      </div>
+      <div id="pdfjs" class="canvas-wrap"></div>
+      <small class="meta">Рендер виконується локально в браузері — без сторонніх сервісів.</small>
+    </section>
+  </main>
+
+  <!-- PDF.js з CDN -->
+  <script type="module">
+    import { getDocument, GlobalWorkerOptions } from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+    GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+    const url = "assets/resume.pdf";
+    const container = document.getElementById("pdfjs");
+    const pageNumEl = document.getElementById("page_num");
+    const pageCountEl = document.getElementById("page_count");
+    const scaleInput = document.getElementById("scale");
+
+    let pdfDoc = null;
+    let currentPage = 1;
+    let scale = parseFloat(scaleInput.value);
+
+    function clearCanvases(){ container.innerHTML = ""; }
+
+    async function renderPage(n){
+      const page = await pdfDoc.getPage(n);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.dataset.page = String(n);
+      const ctx = canvas.getContext("2d");
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      container.appendChild(canvas);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    }
+
+    async function renderAll(){
+      clearCanvases();
+      for(let i=1;i<=pdfDoc.numPages;i++){ await renderPage(i); }
+      pageNumEl.textContent = String(currentPage);
+      pageCountEl.textContent = String(pdfDoc.numPages);
+    }
+
+    (async ()=>{
+      pdfDoc = await getDocument(url).promise;
+      await renderAll();
+    })();
+
+    document.getElementById("prev").onclick = ()=>{
+      if(!pdfDoc) return;
+      currentPage = Math.max(1, currentPage - 1);
+      document.querySelector(`canvas[data-page="${currentPage}"]`)?.scrollIntoView({behavior:"smooth"});
+      pageNumEl.textContent = String(currentPage);
+    };
+    document.getElementById("next").onclick = ()=>{
+      if(!pdfDoc) return;
+      currentPage = Math.min(pdfDoc.numPages, currentPage + 1);
+      document.querySelector(`canvas[data-page="${currentPage}"]`)?.scrollIntoView({behavior:"smooth"});
+      pageNumEl.textContent = String(currentPage);
+    };
+    scaleInput.oninput = async ()=>{
+      scale = parseFloat(scaleInput.value);
+      await renderAll();
+      // Після зміни масштабу — повернутись до поточної сторінки
+      document.querySelector(`canvas[data-page="${currentPage}"]`)?.scrollIntoView({behavior:"smooth"});
+    };
+  </script>
+</body>
+</html>
